@@ -1529,7 +1529,9 @@ async function loadSheetConfig(){
       const url='https://docs.google.com/spreadsheets/d/'+sid+'/gviz/tq?tqx=responseHandler:'+cb+'&sheet=Config';
       window[cb]=function(r){delete window[cb];document.body.removeChild(s);try{
         const cols=r.table.cols.map(c=>c.label||c.id);
+        console.log('Config columns:',cols);
         const rows=r.table.rows.map(r=>{const o={};r.c.forEach((cell,i)=>{o[cols[i]]=cell?(cell.v!==null&&cell.v!==undefined?String(cell.v):''):''});return o});
+        console.log('Config rows:',rows.slice(0,3));
         resolve(rows)}catch(e){reject(e)}};
       const s=document.createElement('script');s.src=url;
       s.onerror=function(){delete window[cb];reject(new Error('No Config tab'))};
@@ -1537,10 +1539,20 @@ async function loadSheetConfig(){
     });
     const cfg={};
     rows.forEach(function(r){
-      const key=r['Key']||r['key']||Object.values(r)[0]||'';
-      const val=r['Value']||r['value']||Object.values(r)[1]||'';
-      if(key.trim())cfg[key.trim()]=val.trim();
+      // Try multiple approaches to find key-value pairs
+      const keys=Object.keys(r);
+      var key='',val='';
+      // Approach 1: explicit Key/Value columns
+      if(r['Key']!==undefined){key=r['Key'];val=r['Value']||''}
+      else if(r['key']!==undefined){key=r['key'];val=r['value']||''}
+      // Approach 2: first two columns whatever they're called
+      else if(keys.length>=2){key=r[keys[0]]||'';val=r[keys[1]]||''}
+      // Skip header row and empty rows
+      if(key.trim()&&key.trim()!=='Key'&&key.trim()!=='key'){
+        cfg[key.trim()]=val.trim();
+      }
     });
+    console.log('Parsed config:',cfg);
     if(cfg.leagueName)adminConfig.leagueName=cfg.leagueName;
     if(cfg.subtitle)adminConfig.subtitle=cfg.subtitle;
     if(cfg.seasonLabel)adminConfig.seasonLabel=cfg.seasonLabel;
@@ -1570,7 +1582,7 @@ async function loadSheetConfig(){
     sheetConfigLoaded=true;
     console.log('Sheet config loaded successfully');
   }catch(e){
-    console.log('No Config tab found, using defaults');
+    console.log('No Config tab found, using defaults:',e.message);
     sheetConfigLoaded=false;
   }
 }
@@ -1955,4 +1967,3 @@ init();
 </script>
 </body>
 </html>
-
