@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>FPL Season 3 — Stats Dashboard</title>
+<title>Stats Dashboard</title>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;800;900&family=Rajdhani:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <style>
@@ -554,7 +554,7 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
   </header>
   <div class="stat-ticker" id="statTicker" style="display:none"><div class="ticker-track" id="tickerTrack"></div></div>
   <div class="gfilters">
-    <div class="ctrl"><label>Season</label><select id="seasonSel" onchange="onGlobalFilter()"><option value="All">All Seasons</option><option value="S3" selected>Season 3</option><option value="S2">Season 2</option><option value="S1">Season 1</option></select></div>
+    <div class="ctrl"><label>Season</label><select id="seasonSel" onchange="onGlobalFilter()"><option value="All">All Seasons</option></select></div>
     <div class="ctrl"><label>Phase</label><select id="phaseSel" onchange="onGlobalFilter()"><option value="All">All</option><option value="Regular">Regular</option><option value="Playoffs">Playoffs</option></select></div>
   </div>
   <nav class="tab-nav" id="tabNav">
@@ -577,7 +577,7 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
     </div>
     <div class="ctrls2">
       <div class="ctrl"><label>Role</label><div class="role-checks" id="roleChecks"><label class="rc"><input type="checkbox" value="TOP" checked onchange="renderLeaderboard()"><span class="rb" style="--rc:#ef4444">Top</span></label><label class="rc"><input type="checkbox" value="JUNGLE" checked onchange="renderLeaderboard()"><span class="rb" style="--rc:#22c55e">Jng</span></label><label class="rc"><input type="checkbox" value="MIDDLE" checked onchange="renderLeaderboard()"><span class="rb" style="--rc:#3b82f6">Mid</span></label><label class="rc"><input type="checkbox" value="BOTTOM" checked onchange="renderLeaderboard()"><span class="rb" style="--rc:#f59e0b">Adc</span></label><label class="rc"><input type="checkbox" value="UTILITY" checked onchange="renderLeaderboard()"><span class="rb" style="--rc:#a855f7">Sup</span></label></div></div>
-      <div class="ctrl"><label>FPL Team</label><select id="teamSel" onchange="renderLeaderboard()"></select></div>
+      <div class="ctrl"><label>Team</label><select id="teamSel" onchange="renderLeaderboard()"></select></div>
       <div class="ctrl"><label>Search Player</label><input type="text" id="searchBar" placeholder="Type a name..." oninput="renderLeaderboard()" style="width:100%;background:var(--bg2);border:1px solid var(--border);color:var(--text);font-family:'Rajdhani',sans-serif;font-size:14px;font-weight:600;padding:8px 12px;transition:all .3s;outline:none" onfocus="this.style.borderColor='var(--cyan)';this.style.boxShadow='0 0 20px #00f0ff15'" onblur="this.style.borderColor='var(--border)';this.style.boxShadow='none'"></div>
     </div>
     <div class="card"><div class="card-t" id="chartTitle"></div><div class="card-s" id="chartSub"></div><div id="bars"></div><div class="player-count" id="playerCount"></div></div>
@@ -591,7 +591,7 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
   <div class="tab-page" id="pg-lookup">
     <div class="card">
       <div class="card-t">🔍 Player Lookup</div>
-      <div class="card-s">Search any FPL player for a deep-dive stat breakdown</div>
+      <div class="card-s">Search any player for a deep-dive stat breakdown</div>
       <div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;align-items:end">
         <div class="ctrl" style="flex:1;min-width:220px"><label>Player Name</label><input type="text" id="lookupInput" placeholder="Start typing a name..." style="width:100%;background:var(--bg2);border:1px solid var(--border);color:var(--text);font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:600;padding:10px 14px;transition:all .3s;outline:none" onfocus="this.style.borderColor='var(--cyan)';this.style.boxShadow='0 0 20px #00f0ff15'" onblur="this.style.borderColor='var(--border)';this.style.boxShadow='none'" oninput="renderLookupSuggestions()"></div>
         <button onclick="executeLookup()" style="background:var(--cyan);border:none;color:var(--bg);font-family:'Orbitron',sans-serif;font-size:11px;font-weight:700;padding:10px 20px;cursor:pointer;letter-spacing:1px;transition:all .3s;height:40px" onmouseover="this.style.boxShadow='0 0 20px var(--cyan-glow)'" onmouseout="this.style.boxShadow='none'">LOOKUP</button>
@@ -906,10 +906,21 @@ function playSuccess(){
 // PATCH EXISTING FUNCTIONS TO ADD NEW EFFECTS
 // ════════════════════════════════════════
 
-// Patch loadData to add ticker + counting animation
+// Patch loadData to add ticker + counting animation + auto-populate season dropdown
 const _origLoadData=loadData;
 loadData=async function(){
   await _origLoadData();
+  // Auto-populate season dropdown from data
+  const seasons=[...new Set(RAW.map(r=>(r['Season']||'').trim()).filter(s=>s))].sort();
+  const sel=document.getElementById('seasonSel');
+  sel.innerHTML='<option value="All">All Seasons</option>';
+  seasons.forEach(s=>{
+    const o=document.createElement('option');
+    o.value=s;o.textContent=s.replace(/^S(\d)/,'Season $1');
+    sel.appendChild(o);
+  });
+  // Select the latest season by default if available
+  if(seasons.length){sel.value=seasons[seasons.length-1];onGlobalFilter()}
   buildTicker();
   animateMetaNumbers();
 };
@@ -1094,7 +1105,7 @@ function openTradingCard(playerName){
   const top5=Object.entries(cm).sort((a,b)=>b[1]-a[1]).slice(0,5);
 
   const overlay=document.getElementById('tradingCardOverlay');
-  overlay.innerHTML=`<div class="trading-card"><div class="tc-glow" style="background:linear-gradient(90deg,${c},var(--cyan),${c})"></div><button class="tc-close" onclick="closeTradingCard()">✕</button><button class="tc-save" onclick="saveTradingCard()">📷 SAVE</button><div class="tc-top"><div class="tc-team-bg" style="background:${c}"></div><div class="tc-role-badge">${icon}</div><div class="tc-player-name" style="color:${c}">${p.player}</div><div class="tc-team-name">${p.team} · ${rl}</div><div class="tc-rating" style="color:${c}">${ps}</div></div><div class="tc-mid"><div class="tc-stat"><div class="tc-stat-val" style="color:${c}">${p.kda}</div><div class="tc-stat-label">KDA</div></div><div class="tc-stat"><div class="tc-stat-val" style="color:${p.winRate>=55?'var(--green)':p.winRate<=45?'var(--pink)':'var(--text)'}">${p.winRate}%</div><div class="tc-stat-label">Win Rate</div></div><div class="tc-stat"><div class="tc-stat-val" style="color:${c}">${p.games}</div><div class="tc-stat-label">Games</div></div><div class="tc-stat"><div class="tc-stat-val" style="color:${c}">${p.killsPerGame}</div><div class="tc-stat-label">K/G</div></div><div class="tc-stat"><div class="tc-stat-val" style="color:${c}">${p.deathsPerGame}</div><div class="tc-stat-label">D/G</div></div><div class="tc-stat"><div class="tc-stat-val" style="color:${c}">${p.assistsPerGame}</div><div class="tc-stat-label">A/G</div></div><div class="tc-stat"><div class="tc-stat-val" style="color:${c}">${p.csPerMin}</div><div class="tc-stat-label">CS/Min</div></div><div class="tc-stat"><div class="tc-stat-val" style="color:${c}">${Math.round(p.damagePerMin)}</div><div class="tc-stat-label">DMG/Min</div></div><div class="tc-stat"><div class="tc-stat-val" style="color:${c}">${p.visionPerMin}</div><div class="tc-stat-label">VIS/Min</div></div></div><div class="tc-champs">${top5.map(([ch])=>champImg(ch,'champ-icon-lg')).join('')}</div><div class="tc-bottom"><div class="tc-bottom-text">FPL SEASON 3 · FRANCHISE PREMIER LEAGUE</div></div></div>`;
+  overlay.innerHTML=`<div class="trading-card"><div class="tc-glow" style="background:linear-gradient(90deg,${c},var(--cyan),${c})"></div><button class="tc-close" onclick="closeTradingCard()">✕</button><button class="tc-save" onclick="saveTradingCard()">📷 SAVE</button><div class="tc-top"><div class="tc-team-bg" style="background:${c}"></div><div class="tc-role-badge">${icon}</div><div class="tc-player-name" style="color:${c}">${p.player}</div><div class="tc-team-name">${p.team} · ${rl}</div><div class="tc-rating" style="color:${c}">${ps}</div></div><div class="tc-mid"><div class="tc-stat"><div class="tc-stat-val" style="color:${c}">${p.kda}</div><div class="tc-stat-label">KDA</div></div><div class="tc-stat"><div class="tc-stat-val" style="color:${p.winRate>=55?'var(--green)':p.winRate<=45?'var(--pink)':'var(--text)'}">${p.winRate}%</div><div class="tc-stat-label">Win Rate</div></div><div class="tc-stat"><div class="tc-stat-val" style="color:${c}">${p.games}</div><div class="tc-stat-label">Games</div></div><div class="tc-stat"><div class="tc-stat-val" style="color:${c}">${p.killsPerGame}</div><div class="tc-stat-label">K/G</div></div><div class="tc-stat"><div class="tc-stat-val" style="color:${c}">${p.deathsPerGame}</div><div class="tc-stat-label">D/G</div></div><div class="tc-stat"><div class="tc-stat-val" style="color:${c}">${p.assistsPerGame}</div><div class="tc-stat-label">A/G</div></div><div class="tc-stat"><div class="tc-stat-val" style="color:${c}">${p.csPerMin}</div><div class="tc-stat-label">CS/Min</div></div><div class="tc-stat"><div class="tc-stat-val" style="color:${c}">${Math.round(p.damagePerMin)}</div><div class="tc-stat-label">DMG/Min</div></div><div class="tc-stat"><div class="tc-stat-val" style="color:${c}">${p.visionPerMin}</div><div class="tc-stat-label">VIS/Min</div></div></div><div class="tc-champs">${top5.map(([ch])=>champImg(ch,'champ-icon-lg')).join('')}</div><div class="tc-bottom"><div class="tc-bottom-text">${adminConfig.seasonLabel.toUpperCase()} · ${adminConfig.leagueName}</div></div></div>`;
   overlay.classList.add('active');
   fireConfetti(c);playSuccess();
 }
@@ -1113,7 +1124,7 @@ function saveTradingCard(){
   html2canvas(card,{backgroundColor:'#06060c',scale:2,useCORS:true,allowTaint:true,logging:false}).then(canvas=>{
     const link=document.createElement('a');
     const name=card.querySelector('.tc-player-name')?.textContent||'player';
-    link.download='FPL_Card_'+name.replace(/\s+/g,'_')+'.png';
+    link.download=(adminConfig.leagueName.replace(/[^a-zA-Z0-9]/g,'_'))+'_Card_'+name.replace(/\s+/g,'_')+'.png';
     link.href=canvas.toDataURL('image/png');
     link.click();
     showToast('Card saved as PNG!');
@@ -1599,6 +1610,7 @@ function applyConfig(){
   if(c.sheetId)window._cfgSheetId=c.sheetId;
 
   // Text content
+  document.title=c.leagueName+' — Stats Dashboard';
   const h1=document.querySelector('.hdr h1');if(h1){h1.textContent=c.leagueName;h1.dataset.text=c.leagueName}
   const sub=document.querySelector('.hdr .sub');if(sub)sub.textContent=c.subtitle;
   const badge=document.querySelector('.badge');if(badge)badge.textContent=c.seasonLabel;
