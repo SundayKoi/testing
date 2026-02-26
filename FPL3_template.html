@@ -615,7 +615,7 @@ body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradie
   <div class="admin-panel" id="adminPanelBox" style="display:none">
     <button class="admin-close" onclick="closeAdmin()">✕</button>
     <h2>⚙ DASHBOARD CONFIGURATION</h2>
-    <div class="admin-sub">Changes are saved to this browser and apply immediately</div>
+    <div class="admin-sub">Edit settings below → Save → Copy Config for Sheet → Paste into your Google Sheet Config tab for everyone to see changes</div>
     <div id="adminContent"></div>
   </div>
 </div>
@@ -1520,39 +1520,36 @@ function loadConfig(){
   }catch(e){adminConfig=JSON.parse(JSON.stringify(DEFAULT_CONFIG))}
 }
 
-// Load config from Google Sheet "Config" tab
+// Load config from Google Sheet "Config" tab via CSV export
 async function loadSheetConfig(){
   try{
     const sid=adminConfig.sheetId||DEFAULT_CONFIG.sheetId;
-    const rows=await new Promise((resolve,reject)=>{
-      const cb='_gcfg_'+Math.random().toString(36).slice(2);
-      const url='https://docs.google.com/spreadsheets/d/'+sid+'/gviz/tq?tqx=responseHandler:'+cb+'&sheet=Config&headers=1';
-      window[cb]=function(r){delete window[cb];document.body.removeChild(s);try{
-        const cols=r.table.cols.map(c=>c.label||c.id);
-        console.log('Config columns:',cols);
-        const rows=r.table.rows.map(r=>{const o={};r.c.forEach((cell,i)=>{o[cols[i]]=cell?(cell.v!==null&&cell.v!==undefined?String(cell.v):''):''});return o});
-        console.log('Config rows:',rows.slice(0,3));
-        resolve(rows)}catch(e){reject(e)}};
-      const s=document.createElement('script');s.src=url;
-      s.onerror=function(){delete window[cb];reject(new Error('No Config tab'))};
-      document.body.appendChild(s);
-    });
+    const csvUrl='https://docs.google.com/spreadsheets/d/'+sid+'/gviz/tq?tqx=out:csv&sheet=Config';
+    const resp=await fetch(csvUrl);
+    if(!resp.ok)throw new Error('HTTP '+resp.status);
+    const text=await resp.text();
+    console.log('Config CSV raw (first 500):',text.substring(0,500));
+
+    // Parse CSV lines
+    const csvLines=text.split('\n').filter(l=>l.trim());
     const cfg={};
-    rows.forEach(function(r){
-      // Try multiple approaches to find key-value pairs
-      const keys=Object.keys(r);
-      var key='',val='';
-      // Approach 1: explicit Key/Value columns
-      if(r['Key']!==undefined){key=r['Key'];val=r['Value']||''}
-      else if(r['key']!==undefined){key=r['key'];val=r['value']||''}
-      // Approach 2: first two columns whatever they're called
-      else if(keys.length>=2){key=r[keys[0]]||'';val=r[keys[1]]||''}
-      // Skip header row and empty rows
-      if(key.trim()&&key.trim()!=='Key'&&key.trim()!=='key'){
-        cfg[key.trim()]=val.trim();
+    csvLines.forEach(function(line,i){
+      // Skip header row
+      if(i===0){var low=line.toLowerCase();if(low.indexOf('key')>=0&&low.indexOf('value')>=0)return}
+      // Parse CSV - handle quoted values
+      var parts=[];var cur='';var inQ=false;
+      for(var c=0;c<line.length;c++){
+        var ch=line[c];
+        if(ch==='"'){inQ=!inQ}
+        else if(ch===','&&!inQ){parts.push(cur.trim());cur=''}
+        else{cur+=ch}
       }
+      parts.push(cur.trim());
+      if(parts.length>=2&&parts[0]){cfg[parts[0]]=parts[1]}
+      else if(parts.length===1&&parts[0]){cfg[parts[0]]=''}
     });
     console.log('Parsed config:',cfg);
+
     if(cfg.leagueName)adminConfig.leagueName=cfg.leagueName;
     if(cfg.subtitle)adminConfig.subtitle=cfg.subtitle;
     if(cfg.seasonLabel)adminConfig.seasonLabel=cfg.seasonLabel;
@@ -1567,8 +1564,9 @@ async function loadSheetConfig(){
     var tabMap={tabLeaderboard:'leaderboard',tabTeams:'teams',tabChampions:'champions',tabRecords:'records',tabMvp:'mvp',tabPower:'power',tabLookup:'lookup'};
     for(var cfgKey in tabMap){
       if(cfg[cfgKey]!==undefined){
+        var v=String(cfg[cfgKey]).toLowerCase();
         var tab=adminConfig.tabs.find(function(t){return t.id===tabMap[cfgKey]});
-        if(tab)tab.enabled=cfg[cfgKey].toLowerCase()==='true';
+        if(tab)tab.enabled=(v==='true'||v==='yes'||v==='1');
       }
     }
     if(cfg.tabOrder){
@@ -1581,11 +1579,13 @@ async function loadSheetConfig(){
     for(var k in cfg){if(k.indexOf('teamColor_')===0){adminConfig.teamColors[k.replace('teamColor_','')]=cfg[k]}}
     sheetConfigLoaded=true;
     console.log('Sheet config loaded successfully');
+    console.log('Final config:',adminConfig.leagueName,adminConfig.colorPrimary,adminConfig.colorSecondary);
   }catch(e){
-    console.log('No Config tab found, using defaults:',e.message);
+    console.log('Config tab error, using defaults:',e.message||e);
     sheetConfigLoaded=false;
   }
 }
+
 
 function saveConfig(){
   try{localStorage.setItem('fpl_dashboard_config_'+DEFAULT_CONFIG.sheetId,JSON.stringify(adminConfig))}catch(e){}
@@ -1745,8 +1745,9 @@ function renderAdminPanel(){
   h+=`</ul></div>`;
 
   // Team Colors
-  h+=`<div class="admin-section"><h3>🎨 Team Colors</h3><div class="admin-hint" style="margin-bottom:10px">Override colors for specific teams. Leave blank to use defaults.</div><div id="adminTeamColors">`;
+  h+=`<div class="admin-section"><h3>🎨 Team Colors</h3><div class="admin-hint" style="margin-bottom:10px">Change colors for each team's bars, cards, and stats. After saving, use "Copy Config for Sheet" to make changes visible to all viewers.</div><div id="adminTeamColors">`;
   const allTeams=[...new Set(PD.map(p=>p.team))].filter(t=>t&&t!=='Sub').sort();
+  if(!allTeams.length){h+=`<div style="font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--dim)">Teams will appear here once data loads. Close admin, wait for dashboard to load, then reopen.</div>`}
   allTeams.forEach(t=>{
     const col=c.teamColors[t]||TC[t]||'#6366f1';
     h+=`<div class="admin-team-row"><input type="text" value="${t}" readonly style="color:${col};font-weight:700"><input type="color" value="${col}" data-team="${t}" onchange="updateTeamColor(this)"><button onclick="resetTeamColor('${t.replace(/'/g,"\\'")}',this)" title="Reset">↺</button></div>`;
@@ -1828,12 +1829,12 @@ function saveAdminConfig(){
   applyConfig();
   renderCurrentTab();
 
+  // Show sheet config copy prompt prominently
+  showSheetConfigInstructions();
+
   const saved=document.getElementById('adminSaved');
   saved.classList.add('show');
-  setTimeout(()=>saved.classList.remove('show'),2000);
-
-  // Show sheet config instructions
-  showSheetConfigInstructions();
+  setTimeout(()=>saved.classList.remove('show'),3000);
 }
 
 function previewAdminConfig(){
