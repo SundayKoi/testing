@@ -721,7 +721,7 @@ for(let i=0;i<60;i++)pts.push(new P);
 function anim(){cx.clearRect(0,0,W,H);for(let i=0;i<pts.length;i++)for(let j=i+1;j<pts.length;j++){const dx=pts[i].x-pts[j].x,dy=pts[i].y-pts[j].y,d=Math.sqrt(dx*dx+dy*dy);if(d<120){cx.beginPath();cx.moveTo(pts[i].x,pts[i].y);cx.lineTo(pts[j].x,pts[j].y);cx.strokeStyle=`rgba(0,240,255,${.03*(1-d/120)})`;cx.lineWidth=.5;cx.stroke()}}pts.forEach(p=>{p.update();p.draw()});requestAnimationFrame(anim)}anim()})();
 
 // DATA CONFIG
-const SHEET_ID='13AS2PQUOGFKHosSwmQqPlxsSXoUKTO33FOOP21gfm2A';
+const SHEET_ID='1QBei0BJqnxJLu68sxNoW8sJCR3SElQA0g_ESQMecHlU';
 
 // XSS Protection — sanitize all sheet data before rendering
 function esc(s){if(typeof s!=='string')return s;return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;')}
@@ -1981,7 +1981,61 @@ function renderFullScout(p){
   h+=simpleRow('Solo Kills Total',colSum('Solo Kills'));
   h+='</div>';
 
-  // === CARD 9: SCOUTING ASSESSMENT ===
+  // === CARD 9: CHAMPION POOL ===
+  var cm={};(p.champData||[]).forEach(function(x){
+    if(!cm[x.champ])cm[x.champ]={games:0,wins:0,kills:0,deaths:0,assists:0,dmg:0,cs:0,dur:0};
+    var ch=cm[x.champ];ch.games++;if(x.win)ch.wins++;ch.kills+=x.kills;ch.deaths+=x.deaths;ch.assists+=x.assists;ch.dmg+=x.damage;ch.cs+=x.cs||0;ch.dur+=x.duration||0;
+  });
+  // Also pull extra data from raw rows for this card
+  pRows.forEach(function(r){
+    var chName=r['Champion']||'';if(!chName)return;
+    if(!cm[chName])return;
+    if(!cm[chName]._soloKills)cm[chName]._soloKills=0;
+    if(!cm[chName]._gold)cm[chName]._gold=0;
+    cm[chName]._soloKills+=(parseFloat(r['Solo Kills'])||0);
+    cm[chName]._gold+=(parseFloat(r['Gold Earned'])||0);
+  });
+  var champList=Object.entries(cm).map(function(e){
+    var n=e[0],d=e[1];
+    var kda=((d.kills+d.assists)/Math.max(d.deaths,1));
+    var wr=d.wins/d.games*100;
+    var avgDmg=d.dmg/d.games;
+    var avgCS=d.dur>0?(d.cs/(d.dur)): 0;
+    return{name:n,games:d.games,wins:d.wins,wr:wr,kda:kda,kills:d.kills/d.games,deaths:d.deaths/d.games,assists:d.assists/d.games,avgDmg:avgDmg,csMin:avgCS,soloKills:(d._soloKills||0)/d.games,gold:(d._gold||0)/d.games};
+  }).sort(function(a,b){return b.games-a.games});
+
+  if(champList.length){
+    h+='<div class="scout-card" style="grid-column:1/-1"><div class="scout-card-title">Champion Pool ('+champList.length+' Champions)</div>';
+    // Header row
+    h+='<div style="display:grid;grid-template-columns:32px 1fr 50px 60px 50px 60px 60px 60px 70px;gap:4px;padding:4px 0;border-bottom:1px solid var(--border);font-family:\'Share Tech Mono\',monospace;font-size:8px;color:var(--dim);letter-spacing:1px">';
+    h+='<div></div><div>CHAMPION</div><div style="text-align:center">GAMES</div><div style="text-align:center">WIN RATE</div><div style="text-align:center">KDA</div><div style="text-align:center">K/D/A</div><div style="text-align:center">DMG/G</div><div style="text-align:center">CS/MIN</div><div style="text-align:center">RATING</div></div>';
+    champList.forEach(function(ch){
+      var wrColor=ch.wr>=60?'var(--green)':ch.wr>=50?'var(--text)':'var(--pink)';
+      var kdaColor=ch.kda>=4?'var(--green)':ch.kda>=2.5?'var(--text)':'var(--pink)';
+      // Rating: weighted score of wr, kda, games
+      var rating=Math.min(100,Math.round(ch.wr*0.4+Math.min(ch.kda*8,40)+Math.min(ch.games*3,20)));
+      var ratingColor=rating>=75?'var(--green)':rating>=50?'var(--gold)':'var(--pink)';
+      var ratingLabel=rating>=80?'S':rating>=65?'A':rating>=50?'B':rating>=35?'C':'D';
+      var barW=Math.min(rating,100);
+      // Mastery tier label
+      var tier=ch.games>=15?'OTP':ch.games>=10?'MAIN':ch.games>=5?'COMFORT':ch.games>=3?'POCKET':'';
+      var tierColor=ch.games>=15?'#b9f2ff':ch.games>=10?'var(--gold)':ch.games>=5?'#c0c0c0':'var(--dim)';
+      h+='<div style="display:grid;grid-template-columns:32px 1fr 50px 60px 50px 60px 60px 60px 70px;gap:4px;padding:6px 0;border-bottom:1px solid #ffffff04;align-items:center;font-family:\'Share Tech Mono\',monospace;font-size:11px">';
+      h+='<div>'+champImg(ch.name,'champ-icon')+'</div>';
+      h+='<div><span style="font-weight:700">'+ch.name+'</span>'+(tier?' <span style="font-size:8px;color:'+tierColor+';letter-spacing:1px">'+tier+'</span>':'')+'</div>';
+      h+='<div style="text-align:center">'+ch.games+'</div>';
+      h+='<div style="text-align:center;color:'+wrColor+'">'+ch.wr.toFixed(0)+'%</div>';
+      h+='<div style="text-align:center;color:'+kdaColor+'">'+ch.kda.toFixed(1)+'</div>';
+      h+='<div style="text-align:center;color:var(--dim);font-size:10px">'+ch.kills.toFixed(1)+'/'+ch.deaths.toFixed(1)+'/'+ch.assists.toFixed(1)+'</div>';
+      h+='<div style="text-align:center">'+Math.round(ch.avgDmg).toLocaleString()+'</div>';
+      h+='<div style="text-align:center">'+ch.csMin.toFixed(1)+'</div>';
+      h+='<div style="text-align:center"><div style="display:flex;align-items:center;gap:4px;justify-content:center"><div style="width:30px;height:5px;background:#ffffff08;border-radius:2px;overflow:hidden"><div style="width:'+barW+'%;height:100%;background:'+ratingColor+'"></div></div><span style="color:'+ratingColor+';font-weight:700;font-size:12px">'+ratingLabel+'</span></div></div>';
+      h+='</div>';
+    });
+    h+='</div>';
+  }
+
+  // === CARD 10: SCOUTING ASSESSMENT ===
   h+='<div class="scout-card" style="grid-column:1/-1"><div class="scout-card-title">Assessment</div>';
   h+='<div class="scout-metrics">';
   if(consist){
