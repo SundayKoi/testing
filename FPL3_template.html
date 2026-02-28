@@ -2035,7 +2035,145 @@ function renderFullScout(p){
     h+='</div>';
   }
 
-  // === CARD 10: SCOUTING ASSESSMENT ===
+  // === CARD 10: BAN & COUNTER RECOMMENDATIONS ===
+  if(champList.length){
+    h+='<div class="scout-card" style="grid-column:1/-1"><div class="scout-card-title">Draft Intelligence</div>';
+    h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">';
+
+    // === BAN RECOMMENDATIONS ===
+    // Sort by: games * winrate * kda (most dangerous picks)
+    var banPriority=champList.filter(function(ch){return ch.games>=2}).map(function(ch){
+      var threat=ch.wr/100*ch.kda*Math.sqrt(ch.games);
+      return{name:ch.name,games:ch.games,wr:ch.wr,kda:ch.kda,threat:threat};
+    }).sort(function(a,b){return b.threat-a.threat});
+
+    h+='<div><div style="font-family:\'Orbitron\',sans-serif;font-size:9px;letter-spacing:2px;color:var(--pink);margin-bottom:10px">🚫 RECOMMENDED BANS</div>';
+    h+='<div style="font-family:\'Share Tech Mono\',monospace;font-size:9px;color:var(--dim);margin-bottom:8px">Highest threat picks — ban these to weaken '+p.player+'</div>';
+    if(banPriority.length){
+      banPriority.slice(0,5).forEach(function(ch,i){
+        var urgency=i===0?'MUST BAN':i===1?'HIGH PRIORITY':i===2?'STRONG BAN':'CONSIDER';
+        var urgColor=i===0?'var(--pink)':i===1?'#f97316':i===2?'var(--gold)':'var(--dim)';
+        h+='<div style="display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid #ffffff04">';
+        h+='<div style="width:20px;text-align:center;font-family:\'Orbitron\',sans-serif;font-size:11px;color:'+urgColor+'">'+(i+1)+'</div>';
+        h+=champImg(ch.name,'champ-icon');
+        h+='<div style="flex:1"><div style="font-family:\'Share Tech Mono\',monospace;font-size:11px;font-weight:700">'+ch.name+'</div>';
+        h+='<div style="font-family:\'Share Tech Mono\',monospace;font-size:9px;color:var(--dim)">'+ch.games+'g · '+ch.wr.toFixed(0)+'% WR · '+ch.kda.toFixed(1)+' KDA</div></div>';
+        h+='<div style="font-family:\'Share Tech Mono\',monospace;font-size:8px;letter-spacing:1px;color:'+urgColor+';text-align:right">'+urgency+'</div>';
+        h+='</div>';
+      });
+    } else {
+      h+='<div style="color:var(--dim);font-size:10px">Not enough data (need 2+ games on a champ)</div>';
+    }
+
+    // Why these bans
+    if(banPriority.length>=2){
+      h+='<div style="margin-top:10px;padding:8px;background:var(--bg);border-left:2px solid var(--pink);font-family:\'Share Tech Mono\',monospace;font-size:9px;color:var(--dim)">';
+      var topBan=banPriority[0];
+      h+='<span style="color:var(--pink)">'+topBan.name+'</span> is their strongest pick at <span style="color:var(--green)">'+topBan.wr.toFixed(0)+'% WR</span> with <span style="color:var(--green)">'+topBan.kda.toFixed(1)+' KDA</span> over '+topBan.games+' games. ';
+      if(banPriority.length>=3){
+        h+='Banning <span style="color:var(--pink)">'+banPriority[0].name+'</span> and <span style="color:var(--pink)">'+banPriority[1].name+'</span> removes their two highest-threat comfort picks.';
+      }
+      h+='</div>';
+    }
+    h+='</div>';
+
+    // === EXPLOIT WEAKNESSES (what to pick / force them onto) ===
+    var weakChamps=champList.filter(function(ch){return ch.games>=2}).map(function(ch){
+      var weakness=(100-ch.wr)/100*(1/Math.max(ch.kda,0.5))*Math.sqrt(ch.games);
+      return{name:ch.name,games:ch.games,wr:ch.wr,kda:ch.kda,deaths:ch.deaths,weakness:weakness};
+    }).sort(function(a,b){return b.weakness-a.weakness});
+
+    // Find their bad matchup patterns: champs where they lose and die a lot
+    var lossChamps=champList.filter(function(ch){return ch.games>=2&&ch.wr<50}).sort(function(a,b){return a.wr-b.wr});
+    var highDeathChamps=champList.filter(function(ch){return ch.games>=2&&ch.deaths>=4}).sort(function(a,b){return b.deaths-a.deaths});
+
+    h+='<div><div style="font-family:\'Orbitron\',sans-serif;font-size:9px;letter-spacing:2px;color:var(--green);margin-bottom:10px">✅ EXPLOIT WEAKNESSES</div>';
+    h+='<div style="font-family:\'Share Tech Mono\',monospace;font-size:9px;color:var(--dim);margin-bottom:8px">Force them onto weak picks or exploit patterns</div>';
+
+    // Champs they're bad at
+    if(lossChamps.length){
+      h+='<div style="font-family:\'Share Tech Mono\',monospace;font-size:8px;letter-spacing:1px;color:var(--dim);margin-bottom:4px">WORST CHAMPIONS (let these through)</div>';
+      lossChamps.slice(0,3).forEach(function(ch){
+        h+='<div style="display:flex;align-items:center;gap:10px;padding:5px 0;border-bottom:1px solid #ffffff04">';
+        h+=champImg(ch.name,'champ-icon');
+        h+='<div style="flex:1;font-family:\'Share Tech Mono\',monospace;font-size:11px">'+ch.name+'</div>';
+        h+='<div style="font-family:\'Share Tech Mono\',monospace;font-size:10px"><span style="color:var(--pink)">'+ch.wr.toFixed(0)+'% WR</span> · '+ch.kda.toFixed(1)+' KDA · '+ch.games+'g</div>';
+        h+='</div>';
+      });
+    }
+
+    // Champs they've lost AGAINST the most (enemy champs that beat them)
+    var enemyChamps={};
+    var matchGroups={};
+    rows.forEach(function(r){var mid=r['Match ID']||'';if(mid){if(!matchGroups[mid])matchGroups[mid]=[];matchGroups[mid].push(r)}});
+    for(var mid in matchGroups){
+      var mRows=matchGroups[mid];
+      var pRow=null;
+      mRows.forEach(function(r){var n=r['Summoner Name']||'';if(NAME_MERGES[n])n=NAME_MERGES[n];if(n===p.player)pRow=r});
+      if(!pRow)continue;
+      var pTeam=(pRow['Teams']||pRow['FPL Team']||'').trim();
+      var lost=pRow['Win']!=='Win';
+      mRows.forEach(function(r){
+        var rTeam=(r['Teams']||r['FPL Team']||'').trim();
+        if(rTeam===pTeam)return; // same team, skip
+        var eCh=r['Champion']||'';if(!eCh)return;
+        if(!enemyChamps[eCh])enemyChamps[eCh]={games:0,losses:0};
+        enemyChamps[eCh].games++;
+        if(lost)enemyChamps[eCh].losses++;
+      });
+    }
+    var nemesis=Object.entries(enemyChamps).filter(function(e){return e[1].games>=2&&e[1].losses>=2}).map(function(e){
+      return{name:e[0],games:e[1].games,losses:e[1].losses,lossRate:e[1].losses/e[1].games*100};
+    }).sort(function(a,b){return b.losses-a.losses||b.lossRate-a.lossRate});
+
+    if(nemesis.length){
+      h+='<div style="margin-top:10px;font-family:\'Share Tech Mono\',monospace;font-size:8px;letter-spacing:1px;color:var(--dim);margin-bottom:4px">NEMESIS CHAMPIONS (they lose to these)</div>';
+      nemesis.slice(0,5).forEach(function(ch){
+        var lrColor=ch.lossRate>=75?'var(--green)':'var(--gold)';
+        h+='<div style="display:flex;align-items:center;gap:10px;padding:5px 0;border-bottom:1px solid #ffffff04">';
+        h+=champImg(ch.name,'champ-icon');
+        h+='<div style="flex:1;font-family:\'Share Tech Mono\',monospace;font-size:11px">'+ch.name+'</div>';
+        h+='<div style="font-family:\'Share Tech Mono\',monospace;font-size:10px"><span style="color:'+lrColor+'">'+ch.losses+'L</span> in '+ch.games+'g · <span style="color:'+lrColor+'">'+ch.lossRate.toFixed(0)+'% loss rate</span></div>';
+        h+='</div>';
+      });
+    }
+
+    // Exploitable patterns
+    h+='<div style="margin-top:10px;font-family:\'Share Tech Mono\',monospace;font-size:8px;letter-spacing:1px;color:var(--dim);margin-bottom:4px">EXPLOITABLE PATTERNS</div>';
+    var patterns=[];
+    // High death rate overall
+    if(p.deathsPerGame>=4)patterns.push({icon:'💀',text:'Dies '+p.deathsPerGame.toFixed(1)+' times/game — pick aggressive all-in champions',color:'var(--green)'});
+    // Low vision
+    if(colAvg('Wards Placed')<8)patterns.push({icon:'👁️',text:'Low ward count ('+colAvg('Wards Placed').toFixed(1)+'/g) — abuse vision gaps with flanks and roams',color:'var(--green)'});
+    // Weak early game (low CS@10 or Gold@10)
+    var cs10=colAvg('CS@10');
+    if(cs10>0&&cs10<60&&(p.mainRole==='MIDDLE'||p.mainRole==='BOTTOM'||p.mainRole==='TOP'))patterns.push({icon:'🏰',text:'Avg '+cs10.toFixed(0)+' CS@10 — punish weak laning with early aggression',color:'var(--green)'});
+    // Small champ pool
+    var comfortPicks=champList.filter(function(ch){return ch.games>=3}).length;
+    if(comfortPicks<=2)patterns.push({icon:'🎭',text:'Only '+comfortPicks+' comfort pick'+(comfortPicks>1?'s':'')+' — easy to ban out',color:'var(--green)'});
+    // Feast or famine (high variance)
+    if(consist&&consist.score<40)patterns.push({icon:'🎲',text:'Inconsistent performer ('+consist.score+'/100) — coinflip player, may tilt if set behind early',color:'var(--green)'});
+    // Low KP
+    if(colAvg('Kill Participation %')<55)patterns.push({icon:'🏝️',text:'Low kill participation ('+colAvg('Kill Participation %').toFixed(0)+'%) — isolated from team, target in side lanes',color:'var(--green)'});
+    // Damage type skew
+    var phys=colSum('Physical Damage'),mag=colSum('Magic Damage'),totalDmg=phys+mag||1;
+    if(mag/totalDmg>0.85)patterns.push({icon:'🛡️',text:Math.round(mag/totalDmg*100)+'% magic damage — stack MR to neutralize',color:'var(--green)'});
+    if(phys/totalDmg>0.85)patterns.push({icon:'🛡️',text:Math.round(phys/totalDmg*100)+'% physical damage — stack armor to neutralize',color:'var(--green)'});
+
+    if(patterns.length){
+      patterns.forEach(function(pt){
+        h+='<div style="display:flex;align-items:flex-start;gap:8px;padding:5px 0;border-bottom:1px solid #ffffff04;font-family:\'Share Tech Mono\',monospace;font-size:10px">';
+        h+='<span>'+pt.icon+'</span><span style="color:'+pt.color+'">'+pt.text+'</span></div>';
+      });
+    } else {
+      h+='<div style="color:var(--dim);font-size:10px">No major exploitable weaknesses detected — well-rounded player</div>';
+    }
+
+    h+='</div>';
+    h+='</div></div>'; // close grid + card
+  }
+
+  // === CARD 11: SCOUTING ASSESSMENT ===
   h+='<div class="scout-card" style="grid-column:1/-1"><div class="scout-card-title">Assessment</div>';
   h+='<div class="scout-metrics">';
   if(consist){
@@ -2060,6 +2198,8 @@ function renderFullScout(p){
   h+='</div></div></div>';
 
   h+='</div>'; // close scout-grid
+
+  h+='<div style="text-align:center;padding:20px 0 10px;font-family:\'Orbitron\',sans-serif;font-size:10px;letter-spacing:3px;color:var(--pink);opacity:.7">⚠️ IF YOU ARE JUST ASS AT THE GAME AND LOSE WITH THIS HELP I AM NOT RESPONSIBLE ⚠️</div>';
 
   el.innerHTML=h;
   el.classList.add('active');
