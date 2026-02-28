@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Draft Assistant — LoL Comp Analyzer</title>
+<link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;400;500;600;700&family=Orbitron:wght@400;500;600;700;800;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --void-900: #050810; --void-800: #0a0f1a; --void-700: #0f1626;
+    --neon-blue: #00d4ff; --neon-pink: #ff2d78; --neon-gold: #ffb800; --neon-green: #00ff88;
+    --role-top: #e8975a; --role-jgl: #6bc26b; --role-mid: #6b9ee8; --role-adc: #e86b6b; --role-sup: #c9a5e8;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--void-900); color: #b8c4d4; font-family: 'Rajdhani', sans-serif; overflow-x: hidden; }
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 2px; }
+  
+  .font-display { font-family: 'Orbitron', sans-serif; }
+  .font-mono { font-family: 'Share Tech Mono', monospace; }
+
+  .hud-panel {
+    position: relative; border-radius: 8px; padding: 12px;
+    background: rgba(10,15,26,0.85); border: 1px solid #1a2235;
+  }
+  .hud-panel::before, .hud-panel::after {
+    content: ''; position: absolute; width: 14px; height: 14px; pointer-events: none;
+  }
+  .hud-panel::before { top: -1px; left: -1px; border-top: 2px solid; border-left: 2px solid; border-radius: 8px 0 0 0; }
+  .hud-panel::after { bottom: -1px; right: -1px; border-bottom: 2px solid; border-right: 2px solid; border-radius: 0 0 8px 0; }
+  .hud-blue { border-color: rgba(0,212,255,0.15); }
+  .hud-blue::before, .hud-blue::after { border-color: rgba(0,212,255,0.3); }
+  .hud-red { border-color: rgba(255,45,120,0.15); }
+  .hud-red::before, .hud-red::after { border-color: rgba(255,45,120,0.3); }
+
+  .slot {
+    display: flex; align-items: center; gap: 8px; padding: 7px 10px;
+    margin-bottom: 3px; border-radius: 5px; border: 1px solid transparent;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .slot:hover { background: rgba(255,255,255,0.03); }
+  .slot-empty { border: 1px dashed #1a2540; }
+  .slot-filled-blue { background: linear-gradient(90deg, rgba(0,212,255,0.06), transparent); border-color: #0a2a3a; }
+  .slot-filled-red { background: linear-gradient(90deg, transparent, rgba(255,45,120,0.06)); border-color: #2a0a1a; }
+  .slot-active { animation: pulse 1.5s ease-in-out infinite; border-style: solid !important; }
+  @keyframes pulse {
+    0%,100% { border-color: rgba(0,212,255,0.2); } 50% { border-color: rgba(0,212,255,0.6); }
+  }
+
+  .role-tag {
+    font-family: 'Orbitron', sans-serif; font-size: 9px; font-weight: 700;
+    min-width: 30px; text-align: center; letter-spacing: 1px;
+  }
+  .arch-tag {
+    font-family: 'Share Tech Mono', monospace; font-size: 9px;
+    padding: 1px 6px; border-radius: 2px; letter-spacing: 0.5px;
+  }
+
+  .champ-row {
+    display: flex; align-items: center; gap: 8px; padding: 5px 8px;
+    border-radius: 4px; cursor: pointer; transition: background 0.12s;
+  }
+  .champ-row:hover { background: rgba(0,212,255,0.05); }
+  .champ-row.unavailable { opacity: 0.25; pointer-events: none; }
+
+  .pick-card {
+    background: var(--void-900); border-radius: 5px; padding: 8px;
+    border: 1px solid #1a2235; cursor: pointer; transition: all 0.15s;
+  }
+  .pick-card:hover { transform: translateY(-2px); border-color: rgba(0,212,255,0.4); }
+
+  .btn {
+    padding: 6px 16px; border-radius: 5px; font-family: 'Share Tech Mono', monospace;
+    font-size: 11px; letter-spacing: 1.5px; border: 1px solid; cursor: pointer;
+    transition: all 0.15s; background: transparent;
+  }
+  .btn-blue-active { background: #1e3a5f; border-color: var(--neon-blue); color: #7dd3fc; }
+  .btn-blue-inactive { border-color: #1e293b; color: #475569; }
+  .btn-red-active { background: #5f1e2e; border-color: var(--neon-pink); color: #fda4af; }
+  .btn-red-inactive { border-color: #1e293b; color: #475569; }
+
+  .stat-bar-bg { height: 3px; background: #111827; border-radius: 2px; overflow: hidden; }
+  .stat-bar-fill { height: 100%; border-radius: 2px; transition: width 0.4s cubic-bezier(0.4,0,0.2,1); }
+
+  .ban-tag {
+    padding: 3px 8px; background: #1f0a10; border-radius: 3px;
+    font-size: 10px; color: #f87171; cursor: pointer; border: 1px solid #3f1520;
+    font-family: 'Share Tech Mono', monospace; transition: all 0.15s;
+  }
+  .ban-tag:hover { background: #2f1520; border-color: #5f2030; }
+
+  .role-filter-btn {
+    padding: 2px 10px; border-radius: 3px; font-size: 9px; font-weight: 700;
+    border: 1px solid #1e293b; cursor: pointer; font-family: 'Orbitron', sans-serif;
+    letter-spacing: 1px; transition: all 0.15s; background: transparent; color: #475569;
+  }
+
+  .search-input {
+    width: 100%; padding: 7px 10px; background: var(--void-900);
+    border: 1px solid #1a2235; border-radius: 5px; color: #c9d1d9;
+    font-family: 'Share Tech Mono', monospace; font-size: 11px;
+    outline: none; transition: border-color 0.15s;
+  }
+  .search-input:focus { border-color: rgba(0,212,255,0.3); }
+
+  .issue-text { font-size: 11px; color: #f87171; margin-bottom: 2px; }
+  .strength-text { font-size: 11px; color: #34d399; margin-bottom: 2px; }
+
+  .main-grid {
+    display: grid; grid-template-columns: 1fr 280px 1fr; gap: 12px;
+    max-width: 1200px; margin: 0 auto;
+  }
+  @media (max-width: 900px) {
+    .main-grid { grid-template-columns: 1fr; }
+  }
+
+  .fade-in { animation: fadeIn 0.2s ease-out; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:translateY(0); } }
+</style>
+</head>
+<body>
+<div id="app" style="min-height:100vh; padding:12px 16px; max-width:1200px; margin:0 auto;">
+
+  <!-- Header -->
+  <header style="text-align:center; margin-bottom:16px;">
+    <h1 class="font-display" style="font-size:22px; font-weight:900; letter-spacing:6px; background:linear-gradient(135deg,#00d4ff,#6366f1,#ec4899); -webkit-background-clip:text; -webkit-text-fill-color:transparent;">
+      DRAFT ASSISTANT
+    </h1>
+    <p class="font-mono" style="font-size:10px; letter-spacing:3px; color:#4a5568; margin-top:4px;">
+      COMPOSITION ANALYSIS · SYNERGY ENGINE · LIVE RECOMMENDATIONS
+    </p>
+  </header>
+
+  <!-- Team Selector + Reset -->
+  <div style="display:flex; justify-content:center; gap:8px; margin-bottom:16px;">
+    <button id="btn-blue" class="btn" onclick="setMyTeam('blue')">MY TEAM: BLUE</button>
+    <button id="btn-red" class="btn" onclick="setMyTeam('red')">MY TEAM: RED</button>
+    <button class="btn" style="border-color:#1e293b; color:#475569;" onclick="resetDraft()" onmouseover="this.style.color='#94a3b8'" onmouseout="this.style.color='#475569'">RESET</button>
+  </div>
+
+  <!-- Main Grid -->
+  <div class="main-grid">
+    <!-- Blue Team -->
+    <div class="hud-panel hud-blue" id="blue-panel">
+      <div id="blue-label" class="font-display" style="font-size:11px; letter-spacing:3px; text-align:center; margin-bottom:10px; color:var(--neon-blue);"></div>
+      <div id="blue-slots"></div>
+      <div id="blue-analysis"></div>
+    </div>
+
+    <!-- Center -->
+    <div style="display:flex; flex-direction:column; gap:12px;">
+      <!-- Bans -->
+      <div class="hud-panel" style="border-color:#2d200a;">
+        <div class="font-display" style="font-size:10px; letter-spacing:3px; text-align:center; margin-bottom:8px; color:#b8860b;">BANS</div>
+        <div id="bans-container" style="display:flex; flex-wrap:wrap; gap:4px; justify-content:center; min-height:28px;"></div>
+      </div>
+
+      <!-- Recommendations -->
+      <div class="hud-panel" style="flex:1; display:flex; flex-direction:column; min-height:0; border-color:#1a2235;">
+        <div id="rec-label" class="font-display" style="font-size:10px; letter-spacing:3px; text-align:center; margin-bottom:8px; color:#64748b;">RECOMMENDATIONS</div>
+        <input id="search-input" class="search-input" type="text" placeholder="Search champion..." oninput="renderCenter()">
+        <div id="role-filters" style="display:flex; gap:4px; justify-content:center; margin:8px 0;"></div>
+        <div id="rec-list" style="flex:1; overflow-y:auto; max-height:440px;"></div>
+      </div>
+    </div>
+
+    <!-- Red Team -->
+    <div class="hud-panel hud-red" id="red-panel">
+      <div id="red-label" class="font-display" style="font-size:11px; letter-spacing:3px; text-align:center; margin-bottom:10px; color:var(--neon-pink);"></div>
+      <div id="red-slots"></div>
+      <div id="red-analysis"></div>
+    </div>
+  </div>
+
+  <!-- Reasoning Panel -->
+  <div id="reasoning-panel" class="hud-panel" style="margin-top:12px; display:none; border-color:#1a2235;">
+    <div id="reasoning-label" class="font-display" style="font-size:10px; letter-spacing:3px; margin-bottom:8px; color:#64748b;"></div>
+    <div id="reasoning-cards" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:8px;"></div>
+  </div>
+</div>
+<script>
+// ============================================================================
+// CHAMPION DATABASE
+// ============================================================================
+const C={
+"Aatrox":{r:"top",r2:"",dt:"physical",cc:3,mob:2,tank:2,sc:1,arch:"bruiser"},
+"Ahri":{r:"mid",r2:"",dt:"magic",cc:2,mob:3,tank:0,sc:1,arch:"burst"},
+"Akali":{r:"mid",r2:"top",dt:"magic",cc:0,mob:4,tank:0,sc:1,arch:"assassin"},
+"Akshan":{r:"mid",r2:"",dt:"physical",cc:0,mob:2,tank:0,sc:1,arch:"dps"},
+"Alistar":{r:"sup",r2:"",dt:"magic",cc:4,mob:2,tank:4,sc:0,arch:"engage"},
+"Ambessa":{r:"top",r2:"",dt:"physical",cc:2,mob:3,tank:1,sc:1,arch:"bruiser"},
+"Amumu":{r:"jgl",r2:"sup",dt:"magic",cc:4,mob:1,tank:3,sc:1,arch:"engage"},
+"Anivia":{r:"mid",r2:"",dt:"magic",cc:3,mob:0,tank:0,sc:2,arch:"poke"},
+"Annie":{r:"mid",r2:"sup",dt:"magic",cc:3,mob:0,tank:0,sc:1,arch:"burst"},
+"Aphelios":{r:"adc",r2:"",dt:"physical",cc:1,mob:0,tank:0,sc:3,arch:"dps"},
+"Ashe":{r:"adc",r2:"",dt:"physical",cc:3,mob:0,tank:0,sc:2,arch:"utility"},
+"Aurelion Sol":{r:"mid",r2:"",dt:"magic",cc:2,mob:1,tank:0,sc:3,arch:"poke"},
+"Aurora":{r:"mid",r2:"top",dt:"magic",cc:2,mob:3,tank:0,sc:1,arch:"burst"},
+"Azir":{r:"mid",r2:"",dt:"magic",cc:2,mob:2,tank:0,sc:3,arch:"dps"},
+"Bard":{r:"sup",r2:"",dt:"magic",cc:3,mob:3,tank:0,sc:1,arch:"utility"},
+"Bel'Veth":{r:"jgl",r2:"",dt:"physical",cc:1,mob:3,tank:1,sc:3,arch:"dps"},
+"Blitzcrank":{r:"sup",r2:"",dt:"magic",cc:4,mob:1,tank:2,sc:0,arch:"catcher"},
+"Brand":{r:"sup",r2:"mid",dt:"magic",cc:1,mob:0,tank:0,sc:2,arch:"poke"},
+"Braum":{r:"sup",r2:"",dt:"magic",cc:4,mob:1,tank:4,sc:0,arch:"peel"},
+"Briar":{r:"jgl",r2:"",dt:"physical",cc:2,mob:2,tank:1,sc:1,arch:"dps"},
+"Caitlyn":{r:"adc",r2:"",dt:"physical",cc:1,mob:1,tank:0,sc:2,arch:"poke"},
+"Camille":{r:"top",r2:"",dt:"mixed",cc:2,mob:3,tank:1,sc:2,arch:"split"},
+"Cassiopeia":{r:"mid",r2:"",dt:"magic",cc:2,mob:1,tank:0,sc:3,arch:"dps"},
+"Cho'Gath":{r:"top",r2:"mid",dt:"magic",cc:3,mob:0,tank:4,sc:2,arch:"engage"},
+"Corki":{r:"mid",r2:"",dt:"mixed",cc:0,mob:2,tank:0,sc:2,arch:"poke"},
+"Darius":{r:"top",r2:"",dt:"physical",cc:2,mob:0,tank:2,sc:1,arch:"bruiser"},
+"Diana":{r:"jgl",r2:"mid",dt:"magic",cc:2,mob:2,tank:1,sc:1,arch:"burst"},
+"Dr. Mundo":{r:"top",r2:"jgl",dt:"magic",cc:0,mob:1,tank:4,sc:2,arch:"bruiser"},
+"Draven":{r:"adc",r2:"",dt:"physical",cc:1,mob:1,tank:0,sc:0,arch:"dps"},
+"Ekko":{r:"jgl",r2:"mid",dt:"magic",cc:2,mob:3,tank:0,sc:1,arch:"assassin"},
+"Elise":{r:"jgl",r2:"",dt:"magic",cc:2,mob:2,tank:0,sc:0,arch:"burst"},
+"Evelynn":{r:"jgl",r2:"",dt:"magic",cc:1,mob:2,tank:0,sc:2,arch:"assassin"},
+"Ezreal":{r:"adc",r2:"",dt:"mixed",cc:0,mob:3,tank:0,sc:2,arch:"poke"},
+"Fiddlesticks":{r:"jgl",r2:"",dt:"magic",cc:3,mob:1,tank:0,sc:2,arch:"burst"},
+"Fiora":{r:"top",r2:"",dt:"physical",cc:1,mob:2,tank:1,sc:2,arch:"split"},
+"Fizz":{r:"mid",r2:"",dt:"magic",cc:1,mob:3,tank:0,sc:1,arch:"assassin"},
+"Galio":{r:"mid",r2:"sup",dt:"magic",cc:3,mob:2,tank:3,sc:1,arch:"engage"},
+"Gangplank":{r:"top",r2:"",dt:"mixed",cc:1,mob:0,tank:1,sc:3,arch:"poke"},
+"Garen":{r:"top",r2:"",dt:"physical",cc:1,mob:1,tank:3,sc:1,arch:"bruiser"},
+"Gnar":{r:"top",r2:"",dt:"physical",cc:3,mob:2,tank:2,sc:1,arch:"engage"},
+"Gragas":{r:"jgl",r2:"top",dt:"magic",cc:3,mob:2,tank:2,sc:1,arch:"engage"},
+"Graves":{r:"jgl",r2:"",dt:"physical",cc:1,mob:2,tank:1,sc:1,arch:"dps"},
+"Gwen":{r:"top",r2:"",dt:"magic",cc:1,mob:2,tank:1,sc:2,arch:"split"},
+"Hecarim":{r:"jgl",r2:"",dt:"physical",cc:2,mob:3,tank:2,sc:1,arch:"engage"},
+"Heimerdinger":{r:"mid",r2:"top",dt:"magic",cc:1,mob:0,tank:0,sc:2,arch:"poke"},
+"Hwei":{r:"mid",r2:"sup",dt:"magic",cc:2,mob:0,tank:0,sc:2,arch:"poke"},
+"Illaoi":{r:"top",r2:"",dt:"physical",cc:1,mob:0,tank:3,sc:1,arch:"bruiser"},
+"Irelia":{r:"top",r2:"mid",dt:"physical",cc:2,mob:3,tank:1,sc:1,arch:"split"},
+"Ivern":{r:"jgl",r2:"",dt:"magic",cc:2,mob:1,tank:0,sc:1,arch:"utility"},
+"Janna":{r:"sup",r2:"",dt:"magic",cc:3,mob:2,tank:0,sc:1,arch:"peel"},
+"Jarvan IV":{r:"jgl",r2:"",dt:"physical",cc:3,mob:2,tank:2,sc:0,arch:"engage"},
+"Jax":{r:"top",r2:"jgl",dt:"mixed",cc:2,mob:2,tank:2,sc:2,arch:"split"},
+"Jayce":{r:"top",r2:"mid",dt:"physical",cc:1,mob:1,tank:0,sc:1,arch:"poke"},
+"Jhin":{r:"adc",r2:"",dt:"physical",cc:2,mob:1,tank:0,sc:2,arch:"poke"},
+"Jinx":{r:"adc",r2:"",dt:"physical",cc:2,mob:1,tank:0,sc:3,arch:"dps"},
+"K'Sante":{r:"top",r2:"",dt:"mixed",cc:3,mob:2,tank:3,sc:1,arch:"engage"},
+"Kai'Sa":{r:"adc",r2:"",dt:"mixed",cc:0,mob:2,tank:0,sc:2,arch:"dps"},
+"Kalista":{r:"adc",r2:"",dt:"physical",cc:1,mob:3,tank:0,sc:1,arch:"dps"},
+"Karma":{r:"sup",r2:"mid",dt:"magic",cc:1,mob:1,tank:0,sc:0,arch:"utility"},
+"Karthus":{r:"jgl",r2:"mid",dt:"magic",cc:1,mob:0,tank:0,sc:3,arch:"dps"},
+"Kassadin":{r:"mid",r2:"",dt:"magic",cc:1,mob:4,tank:0,sc:3,arch:"assassin"},
+"Katarina":{r:"mid",r2:"",dt:"magic",cc:0,mob:4,tank:0,sc:1,arch:"assassin"},
+"Kayle":{r:"top",r2:"",dt:"magic",cc:1,mob:1,tank:0,sc:3,arch:"dps"},
+"Kayn":{r:"jgl",r2:"",dt:"physical",cc:1,mob:3,tank:1,sc:2,arch:"assassin"},
+"Kennen":{r:"top",r2:"",dt:"magic",cc:3,mob:2,tank:0,sc:1,arch:"engage"},
+"Kha'Zix":{r:"jgl",r2:"",dt:"physical",cc:1,mob:3,tank:0,sc:1,arch:"assassin"},
+"Kindred":{r:"jgl",r2:"",dt:"physical",cc:1,mob:2,tank:0,sc:2,arch:"dps"},
+"Kled":{r:"top",r2:"",dt:"physical",cc:2,mob:3,tank:2,sc:0,arch:"engage"},
+"Kog'Maw":{r:"adc",r2:"",dt:"mixed",cc:1,mob:0,tank:0,sc:3,arch:"dps"},
+"LeBlanc":{r:"mid",r2:"",dt:"magic",cc:2,mob:4,tank:0,sc:1,arch:"assassin"},
+"Lee Sin":{r:"jgl",r2:"",dt:"physical",cc:2,mob:4,tank:1,sc:0,arch:"engage"},
+"Leona":{r:"sup",r2:"",dt:"magic",cc:4,mob:1,tank:4,sc:0,arch:"engage"},
+"Lillia":{r:"jgl",r2:"",dt:"magic",cc:2,mob:3,tank:1,sc:2,arch:"dps"},
+"Lissandra":{r:"mid",r2:"",dt:"magic",cc:3,mob:2,tank:1,sc:1,arch:"engage"},
+"Lucian":{r:"adc",r2:"mid",dt:"physical",cc:0,mob:2,tank:0,sc:1,arch:"dps"},
+"Lulu":{r:"sup",r2:"",dt:"magic",cc:3,mob:1,tank:0,sc:1,arch:"peel"},
+"Lux":{r:"sup",r2:"mid",dt:"magic",cc:2,mob:0,tank:0,sc:2,arch:"poke"},
+"Malphite":{r:"top",r2:"",dt:"magic",cc:3,mob:1,tank:4,sc:1,arch:"engage"},
+"Malzahar":{r:"mid",r2:"",dt:"magic",cc:3,mob:0,tank:0,sc:2,arch:"poke"},
+"Maokai":{r:"sup",r2:"jgl",dt:"magic",cc:3,mob:1,tank:3,sc:1,arch:"engage"},
+"Master Yi":{r:"jgl",r2:"",dt:"physical",cc:0,mob:3,tank:0,sc:3,arch:"dps"},
+"Mel":{r:"mid",r2:"",dt:"magic",cc:1,mob:1,tank:0,sc:2,arch:"burst"},
+"Milio":{r:"sup",r2:"",dt:"magic",cc:2,mob:1,tank:0,sc:1,arch:"peel"},
+"Miss Fortune":{r:"adc",r2:"",dt:"physical",cc:1,mob:1,tank:0,sc:1,arch:"poke"},
+"Mordekaiser":{r:"top",r2:"",dt:"magic",cc:1,mob:0,tank:3,sc:1,arch:"bruiser"},
+"Morgana":{r:"sup",r2:"mid",dt:"magic",cc:3,mob:0,tank:0,sc:1,arch:"catcher"},
+"Naafiri":{r:"mid",r2:"jgl",dt:"physical",cc:0,mob:3,tank:0,sc:1,arch:"assassin"},
+"Nami":{r:"sup",r2:"",dt:"magic",cc:3,mob:1,tank:0,sc:1,arch:"peel"},
+"Nasus":{r:"top",r2:"",dt:"physical",cc:2,mob:0,tank:3,sc:3,arch:"split"},
+"Nautilus":{r:"sup",r2:"",dt:"magic",cc:4,mob:1,tank:3,sc:0,arch:"engage"},
+"Neeko":{r:"mid",r2:"sup",dt:"magic",cc:3,mob:0,tank:0,sc:1,arch:"engage"},
+"Nidalee":{r:"jgl",r2:"",dt:"magic",cc:0,mob:3,tank:0,sc:0,arch:"poke"},
+"Nilah":{r:"adc",r2:"",dt:"physical",cc:1,mob:2,tank:0,sc:2,arch:"dps"},
+"Nocturne":{r:"jgl",r2:"",dt:"physical",cc:1,mob:2,tank:1,sc:1,arch:"assassin"},
+"Nunu":{r:"jgl",r2:"",dt:"magic",cc:3,mob:2,tank:3,sc:0,arch:"engage"},
+"Olaf":{r:"jgl",r2:"top",dt:"physical",cc:0,mob:2,tank:2,sc:0,arch:"bruiser"},
+"Orianna":{r:"mid",r2:"",dt:"magic",cc:3,mob:0,tank:0,sc:2,arch:"utility"},
+"Ornn":{r:"top",r2:"",dt:"magic",cc:4,mob:1,tank:4,sc:2,arch:"engage"},
+"Pantheon":{r:"jgl",r2:"top",dt:"physical",cc:2,mob:2,tank:1,sc:0,arch:"burst"},
+"Poppy":{r:"sup",r2:"top",dt:"physical",cc:3,mob:1,tank:3,sc:1,arch:"peel"},
+"Pyke":{r:"sup",r2:"",dt:"physical",cc:3,mob:3,tank:0,sc:0,arch:"catcher"},
+"Qiyana":{r:"mid",r2:"",dt:"physical",cc:2,mob:3,tank:0,sc:1,arch:"assassin"},
+"Quinn":{r:"top",r2:"",dt:"physical",cc:1,mob:3,tank:0,sc:1,arch:"dps"},
+"Rakan":{r:"sup",r2:"",dt:"magic",cc:4,mob:4,tank:1,sc:0,arch:"engage"},
+"Rammus":{r:"jgl",r2:"",dt:"magic",cc:3,mob:2,tank:4,sc:1,arch:"engage"},
+"Rek'Sai":{r:"jgl",r2:"",dt:"physical",cc:2,mob:3,tank:2,sc:0,arch:"engage"},
+"Rell":{r:"sup",r2:"",dt:"magic",cc:4,mob:2,tank:3,sc:0,arch:"engage"},
+"Renata Glasc":{r:"sup",r2:"",dt:"magic",cc:3,mob:0,tank:0,sc:1,arch:"utility"},
+"Renekton":{r:"top",r2:"",dt:"physical",cc:2,mob:2,tank:2,sc:0,arch:"bruiser"},
+"Rengar":{r:"jgl",r2:"top",dt:"physical",cc:1,mob:2,tank:0,sc:1,arch:"assassin"},
+"Riven":{r:"top",r2:"",dt:"physical",cc:2,mob:4,tank:1,sc:1,arch:"split"},
+"Rumble":{r:"top",r2:"mid",dt:"magic",cc:1,mob:0,tank:1,sc:1,arch:"poke"},
+"Ryze":{r:"mid",r2:"",dt:"magic",cc:1,mob:1,tank:1,sc:2,arch:"dps"},
+"Samira":{r:"adc",r2:"",dt:"physical",cc:0,mob:2,tank:0,sc:1,arch:"dps"},
+"Sejuani":{r:"jgl",r2:"",dt:"magic",cc:4,mob:1,tank:4,sc:1,arch:"engage"},
+"Senna":{r:"sup",r2:"adc",dt:"physical",cc:2,mob:0,tank:0,sc:3,arch:"utility"},
+"Seraphine":{r:"sup",r2:"mid",dt:"magic",cc:2,mob:0,tank:0,sc:2,arch:"utility"},
+"Sett":{r:"top",r2:"sup",dt:"physical",cc:2,mob:1,tank:3,sc:0,arch:"engage"},
+"Shaco":{r:"jgl",r2:"",dt:"physical",cc:1,mob:2,tank:0,sc:1,arch:"assassin"},
+"Shen":{r:"top",r2:"",dt:"magic",cc:2,mob:2,tank:3,sc:1,arch:"peel"},
+"Shyvana":{r:"jgl",r2:"",dt:"mixed",cc:1,mob:2,tank:2,sc:2,arch:"dps"},
+"Singed":{r:"top",r2:"",dt:"magic",cc:2,mob:2,tank:3,sc:1,arch:"bruiser"},
+"Sion":{r:"top",r2:"",dt:"physical",cc:3,mob:1,tank:4,sc:2,arch:"engage"},
+"Sivir":{r:"adc",r2:"",dt:"physical",cc:0,mob:1,tank:0,sc:2,arch:"dps"},
+"Skarner":{r:"jgl",r2:"",dt:"mixed",cc:3,mob:2,tank:3,sc:1,arch:"engage"},
+"Smolder":{r:"adc",r2:"mid",dt:"magic",cc:1,mob:1,tank:0,sc:3,arch:"poke"},
+"Sona":{r:"sup",r2:"",dt:"magic",cc:2,mob:1,tank:0,sc:2,arch:"utility"},
+"Soraka":{r:"sup",r2:"",dt:"magic",cc:2,mob:0,tank:0,sc:1,arch:"peel"},
+"Swain":{r:"sup",r2:"mid",dt:"magic",cc:2,mob:0,tank:2,sc:2,arch:"engage"},
+"Sylas":{r:"mid",r2:"top",dt:"magic",cc:2,mob:3,tank:1,sc:1,arch:"burst"},
+"Syndra":{r:"mid",r2:"",dt:"magic",cc:2,mob:0,tank:0,sc:2,arch:"burst"},
+"Tahm Kench":{r:"sup",r2:"top",dt:"magic",cc:3,mob:1,tank:4,sc:1,arch:"peel"},
+"Taliyah":{r:"mid",r2:"jgl",dt:"magic",cc:2,mob:2,tank:0,sc:1,arch:"poke"},
+"Talon":{r:"mid",r2:"jgl",dt:"physical",cc:1,mob:4,tank:0,sc:1,arch:"assassin"},
+"Taric":{r:"sup",r2:"",dt:"magic",cc:2,mob:0,tank:3,sc:1,arch:"peel"},
+"Teemo":{r:"top",r2:"",dt:"magic",cc:1,mob:1,tank:0,sc:1,arch:"poke"},
+"Thresh":{r:"sup",r2:"",dt:"magic",cc:4,mob:1,tank:2,sc:1,arch:"catcher"},
+"Tristana":{r:"adc",r2:"mid",dt:"physical",cc:1,mob:2,tank:0,sc:3,arch:"dps"},
+"Trundle":{r:"jgl",r2:"top",dt:"physical",cc:1,mob:1,tank:2,sc:1,arch:"bruiser"},
+"Tryndamere":{r:"top",r2:"",dt:"physical",cc:0,mob:2,tank:0,sc:2,arch:"split"},
+"Twisted Fate":{r:"mid",r2:"",dt:"magic",cc:2,mob:2,tank:0,sc:1,arch:"utility"},
+"Twitch":{r:"adc",r2:"",dt:"mixed",cc:1,mob:1,tank:0,sc:3,arch:"dps"},
+"Udyr":{r:"jgl",r2:"",dt:"mixed",cc:2,mob:2,tank:3,sc:1,arch:"bruiser"},
+"Urgot":{r:"top",r2:"",dt:"physical",cc:2,mob:1,tank:3,sc:1,arch:"bruiser"},
+"Varus":{r:"adc",r2:"mid",dt:"mixed",cc:2,mob:0,tank:0,sc:2,arch:"poke"},
+"Vayne":{r:"adc",r2:"top",dt:"physical",cc:1,mob:2,tank:0,sc:3,arch:"dps"},
+"Veigar":{r:"mid",r2:"",dt:"magic",cc:2,mob:0,tank:0,sc:3,arch:"burst"},
+"Vel'Koz":{r:"sup",r2:"mid",dt:"magic",cc:2,mob:0,tank:0,sc:2,arch:"poke"},
+"Vex":{r:"mid",r2:"",dt:"magic",cc:2,mob:2,tank:0,sc:1,arch:"burst"},
+"Vi":{r:"jgl",r2:"",dt:"physical",cc:3,mob:2,tank:2,sc:1,arch:"engage"},
+"Viego":{r:"jgl",r2:"",dt:"physical",cc:1,mob:2,tank:1,sc:1,arch:"dps"},
+"Viktor":{r:"mid",r2:"",dt:"magic",cc:2,mob:0,tank:0,sc:2,arch:"poke"},
+"Vladimir":{r:"mid",r2:"top",dt:"magic",cc:0,mob:1,tank:2,sc:3,arch:"burst"},
+"Volibear":{r:"top",r2:"jgl",dt:"mixed",cc:2,mob:2,tank:3,sc:1,arch:"engage"},
+"Warwick":{r:"jgl",r2:"",dt:"mixed",cc:2,mob:2,tank:2,sc:0,arch:"dps"},
+"Wukong":{r:"jgl",r2:"top",dt:"physical",cc:3,mob:2,tank:2,sc:1,arch:"engage"},
+"Xayah":{r:"adc",r2:"",dt:"physical",cc:1,mob:1,tank:0,sc:2,arch:"dps"},
+"Xerath":{r:"mid",r2:"sup",dt:"magic",cc:2,mob:0,tank:0,sc:2,arch:"poke"},
+"Xin Zhao":{r:"jgl",r2:"",dt:"physical",cc:2,mob:2,tank:2,sc:0,arch:"engage"},
+"Yasuo":{r:"mid",r2:"adc",dt:"physical",cc:2,mob:4,tank:0,sc:2,arch:"dps"},
+"Yone":{r:"mid",r2:"top",dt:"mixed",cc:2,mob:3,tank:0,sc:2,arch:"dps"},
+"Yorick":{r:"top",r2:"",dt:"physical",cc:1,mob:0,tank:2,sc:2,arch:"split"},
+"Yuumi":{r:"sup",r2:"",dt:"magic",cc:1,mob:0,tank:0,sc:2,arch:"peel"},
+"Yunara":{r:"sup",r2:"",dt:"magic",cc:2,mob:1,tank:0,sc:1,arch:"peel"},
+"Zac":{r:"jgl",r2:"",dt:"magic",cc:4,mob:3,tank:4,sc:1,arch:"engage"},
+"Zed":{r:"mid",r2:"",dt:"physical",cc:0,mob:4,tank:0,sc:1,arch:"assassin"},
+"Zeri":{r:"adc",r2:"",dt:"physical",cc:1,mob:3,tank:0,sc:2,arch:"dps"},
+"Ziggs":{r:"adc",r2:"mid",dt:"magic",cc:1,mob:1,tank:0,sc:2,arch:"poke"},
+"Zilean":{r:"sup",r2:"mid",dt:"magic",cc:2,mob:1,tank:0,sc:2,arch:"utility"},
+"Zoe":{r:"mid",r2:"",dt:"magic",cc:2,mob:2,tank:0,sc:1,arch:"poke"},
+"Zyra":{r:"sup",r2:"mid",dt:"magic",cc:2,mob:0,tank:0,sc:1,arch:"poke"},
+};
+
+const ALL_CHAMPS = Object.keys(C).sort();
+const ROLES = ["top","jgl","mid","adc","sup"];
+const ROLE_LABELS = {top:"TOP",jgl:"JGL",mid:"MID",adc:"ADC",sup:"SUP"};
+const ROLE_COLORS = {top:"#e8975a",jgl:"#6bc26b",mid:"#6b9ee8",adc:"#e86b6b",sup:"#c9a5e8"};
+const ARCH_COLORS = {engage:"#e85a3a",poke:"#5ab8e8",burst:"#e85ae8",dps:"#e8c93a",peel:"#5ae895",split:"#c49a5a",utility:"#8a8ae8",assassin:"#9a3ae8",catcher:"#e89a5a",bruiser:"#8a6844"};
+
+// ============================================================================
+// SCORING ENGINE
+// ============================================================================
+
+function scoreChamp(name, myTeam, enemyTeam, role) {
+  const c = C[name];
+  if (!c) return {score:0, reasons:[]};
+  const myPicks = myTeam.filter(s=>s.champ).map(s=>C[s.champ]).filter(Boolean);
+  const enemyPicks = enemyTeam.filter(s=>s.champ).map(s=>C[s.champ]).filter(Boolean);
+  let score = 50;
+  const reasons = [];
+
+  // Role fit
+  if (role && c.r !== role && c.r2 !== role) { score -= 15; reasons.push({t:"Off-role",v:-15}); }
+
+  // Team synergy
+  if (myPicks.length > 0) {
+    const hasEng = myPicks.some(p=>p.arch==="engage");
+    const hasPeel = myPicks.some(p=>p.arch==="peel");
+    const hasCarry = myPicks.some(p=>p.sc>=3);
+    const dmgs = myPicks.map(p=>p.dt);
+    const allAD = dmgs.every(d=>d==="physical");
+    const allAP = dmgs.every(d=>d==="magic");
+    const totalCC = myPicks.reduce((s,p)=>s+p.cc,0);
+    const avgSc = myPicks.reduce((s,p)=>s+p.sc,0)/myPicks.length;
+
+    if (!hasEng && c.arch==="engage") { score+=8; reasons.push({t:"Team needs engage",v:8}); }
+    if (!hasPeel && hasCarry && c.arch==="peel") { score+=7; reasons.push({t:"Peel for carry",v:7}); }
+    if (allAD && myPicks.length>=2 && c.dt==="magic") { score+=6; reasons.push({t:"AP into full AD team",v:6}); }
+    if (allAP && myPicks.length>=2 && c.dt==="physical") { score+=6; reasons.push({t:"AD into full AP team",v:6}); }
+    if (totalCC<4 && c.cc>=3) { score+=5; reasons.push({t:"Adds CC",v:5}); }
+    if (avgSc<1.0 && c.sc>=2) { score+=4; reasons.push({t:"Adds scaling",v:4}); }
+    if (avgSc>2.0 && c.sc<=0) { score+=3; reasons.push({t:"Early power spike",v:3}); }
+    if (hasEng && ["burst","assassin","dps"].includes(c.arch)) { score+=3; reasons.push({t:"Follow-up for engage",v:3}); }
+    if (hasPeel && c.sc>=3) { score+=3; reasons.push({t:"Protected carry",v:3}); }
+
+    // Frontline check
+    const hasFront = myPicks.some(p=>p.tank>=3);
+    if (!hasFront && c.tank>=3 && myPicks.length>=2) { score+=5; reasons.push({t:"Adds frontline",v:5}); }
+  }
+
+  // Counter enemy
+  if (enemyPicks.length > 0) {
+    const eMob = enemyPicks.reduce((s,p)=>s+p.mob,0)/enemyPicks.length;
+    const eTank = enemyPicks.reduce((s,p)=>s+p.tank,0)/enemyPicks.length;
+    const eSc = enemyPicks.reduce((s,p)=>s+p.sc,0)/enemyPicks.length;
+    const eAllAD = enemyPicks.every(p=>p.dt==="physical");
+    const eAllAP = enemyPicks.every(p=>p.dt==="magic");
+
+    if (eMob>=2.5 && c.cc>=3) { score+=5; reasons.push({t:"CC vs mobile enemy",v:5}); }
+    if (eTank>=2 && c.dt==="mixed") { score+=4; reasons.push({t:"Mixed dmg vs tanks",v:4}); }
+    if (eSc>=2.5 && c.sc<=0) { score+=4; reasons.push({t:"Early vs late comp",v:4}); }
+    if (eAllAD && c.tank>=3) { score+=5; reasons.push({t:"Tank vs full AD",v:5}); }
+    if (eAllAP && c.tank>=3) { score+=5; reasons.push({t:"Tank vs full AP",v:5}); }
+    if (enemyPicks.some(p=>p.arch==="assassin") && c.arch==="peel") { score+=4; reasons.push({t:"Peel vs assassin",v:4}); }
+  }
+
+  score += c.sc * 1.5; // Slight scaling bias
+  return {score: Math.round(score), reasons};
+}
+
+function getRecs(myTeam, enemyTeam, banned, role, limit=20) {
+  const taken = new Set([
+    ...myTeam.filter(s=>s.champ).map(s=>s.champ),
+    ...enemyTeam.filter(s=>s.champ).map(s=>s.champ),
+    ...banned
+  ]);
+  return ALL_CHAMPS
+    .filter(n=>!taken.has(n))
+    .filter(n=>!role || C[n].r===role || C[n].r2===role)
+    .map(n=>({name:n, ...scoreChamp(n, myTeam, enemyTeam, role)}))
+    .sort((a,b)=>b.score-a.score)
+    .slice(0, limit);
+}
+
+function analyzeComp(team) {
+  const picks = team.filter(s=>s.champ).map(s=>C[s.champ]).filter(Boolean);
+  if (!picks.length) return null;
+  const a = {
+    cc: picks.reduce((s,p)=>s+p.cc,0),
+    sc: picks.reduce((s,p)=>s+p.sc,0)/picks.length,
+    tank: picks.reduce((s,p)=>s+p.tank,0)/picks.length,
+    mob: picks.reduce((s,p)=>s+p.mob,0)/picks.length,
+    dmg: {physical:0, magic:0, mixed:0},
+    archs: {},
+    issues: [],
+    strengths: []
+  };
+  picks.forEach(p => {
+    a.dmg[p.dt] = (a.dmg[p.dt]||0)+1;
+    a.archs[p.arch] = (a.archs[p.arch]||0)+1;
+  });
+
+  if (a.dmg.physical>=4) a.issues.push("Full AD — enemy stacks armor");
+  if (a.dmg.magic>=4) a.issues.push("Full AP — enemy stacks MR");
+  if (a.cc<=3 && picks.length>=3) a.issues.push("Low CC — hard to lock targets");
+  if (a.tank<0.5 && picks.length>=3) a.issues.push("No frontline — very squishy");
+  if (!a.archs.engage && !a.archs.catcher && picks.length>=4) a.issues.push("No engage — need poke/picks");
+  if (a.sc<=0.5 && picks.length>=3) a.issues.push("Low scaling — must win early");
+
+  if (a.archs.engage && (a.archs.burst||a.archs.dps)) a.strengths.push("Engage + follow-up");
+  if (a.archs.peel && a.sc>=2) a.strengths.push("Protect-the-carry");
+  if (a.dmg.physical>0 && a.dmg.magic>0) a.strengths.push("Mixed damage");
+  if (a.cc>=12) a.strengths.push("CC-heavy teamfight");
+  if (a.mob>=2.5) a.strengths.push("High mobility / rotations");
+  if (a.archs.split && picks.length>=4) a.strengths.push("Split-push threat");
+
+  return a;
+}
+
+// ============================================================================
+// STATE
+// ============================================================================
+let blueTeam = ROLES.map(r=>({role:r, champ:null}));
+let redTeam = ROLES.map(r=>({role:r, champ:null}));
+let bans = [];
+let activeSlot = null; // {team:'blue'|'red', idx:N} or {type:'ban'}
+let myTeam = 'blue';
+let filterRole = null;
+
+function setMyTeam(side) {
+  myTeam = side;
+  renderAll();
+}
+
+function resetDraft() {
+  blueTeam = ROLES.map(r=>({role:r, champ:null}));
+  redTeam = ROLES.map(r=>({role:r, champ:null}));
+  bans = [];
+  activeSlot = null;
+  filterRole = null;
+  document.getElementById('search-input').value = '';
+  renderAll();
+}
+
+function clickSlot(team, idx) {
+  const t = team==='blue' ? blueTeam : redTeam;
+  if (t[idx].champ) return; // already filled
+  activeSlot = {team, idx};
+  renderAll();
+  document.getElementById('search-input').focus();
+}
+
+function removeChamp(team, idx) {
+  const t = team==='blue' ? blueTeam : redTeam;
+  t[idx].champ = null;
+  renderAll();
+}
+
+function clickBanBtn() {
+  activeSlot = {type:'ban'};
+  renderAll();
+  document.getElementById('search-input').focus();
+}
+
+function removeBan(idx) {
+  bans.splice(idx, 1);
+  renderAll();
+}
+
+function pickChamp(name) {
+  if (!activeSlot) return;
+  if (activeSlot.type==='ban') {
+    bans.push(name);
+  } else {
+    const t = activeSlot.team==='blue' ? blueTeam : redTeam;
+    t[activeSlot.idx].champ = name;
+  }
+  activeSlot = null;
+  document.getElementById('search-input').value = '';
+  renderAll();
+}
+
+function toggleRoleFilter(r) {
+  filterRole = filterRole===r ? null : r;
+  renderAll();
+}
+
+// ============================================================================
+// RENDERING
+// ============================================================================
+
+function renderAll() {
+  renderTeamButtons();
+  renderSlots('blue');
+  renderSlots('red');
+  renderBans();
+  renderCenter();
+  renderAnalysis('blue');
+  renderAnalysis('red');
+  renderReasoning();
+}
+
+function renderTeamButtons() {
+  const bb = document.getElementById('btn-blue');
+  const br = document.getElementById('btn-red');
+  bb.className = 'btn ' + (myTeam==='blue' ? 'btn-blue-active' : 'btn-blue-inactive');
+  br.className = 'btn ' + (myTeam==='red' ? 'btn-red-active' : 'btn-red-inactive');
+
+  document.getElementById('blue-label').innerHTML = 'BLUE SIDE' + (myTeam==='blue' ? ' <span style="font-size:8px;color:#64748b;">(YOU)</span>' : '');
+  document.getElementById('red-label').innerHTML = 'RED SIDE' + (myTeam==='red' ? ' <span style="font-size:8px;color:#64748b;">(YOU)</span>' : '');
+}
+
+function renderSlots(side) {
+  const team = side==='blue' ? blueTeam : redTeam;
+  const container = document.getElementById(side+'-slots');
+  let html = '';
+
+  team.forEach((slot, idx) => {
+    const isActive = activeSlot && activeSlot.team===side && activeSlot.idx===idx;
+    const c = slot.champ ? C[slot.champ] : null;
+    const fillClass = slot.champ ? 'slot-filled-'+side : 'slot-empty';
+    const activeClass = isActive ? 'slot-active' : '';
+
+    html += `<div class="slot ${fillClass} ${activeClass}" onclick="${slot.champ ? '' : `clickSlot('${side}',${idx})`}">`;
+    html += `<span class="role-tag" style="color:${ROLE_COLORS[slot.role]}">${ROLE_LABELS[slot.role]}</span>`;
+
+    if (slot.champ) {
+      const archBg = (ARCH_COLORS[c.arch]||'#555') + '25';
+      const archCol = ARCH_COLORS[c.arch]||'#888';
+      html += `<span style="font-size:13px;font-weight:600;flex:1;color:#e2e8f0;">${slot.champ}</span>`;
+      html += `<span class="arch-tag" style="background:${archBg};color:${archCol}">${c.arch}</span>`;
+      html += `<span onclick="event.stopPropagation();removeChamp('${side}',${idx})" style="font-size:11px;color:#4a5568;cursor:pointer;padding:0 4px;margin-left:4px;">✕</span>`;
+    } else {
+      const col = isActive ? (side==='blue'?'var(--neon-blue)':'var(--neon-pink)') : '#374151';
+      html += `<span style="font-size:11px;color:${col};flex:1;">${isActive ? 'Select champion...' : 'Click to pick'}</span>`;
+    }
+    html += '</div>';
+  });
+
+  container.innerHTML = html;
+}
+
+function renderBans() {
+  const container = document.getElementById('bans-container');
+  let html = '';
+  bans.forEach((b, i) => {
+    html += `<span class="ban-tag" onclick="removeBan(${i})">✕ ${b}</span>`;
+  });
+
+  const isActive = activeSlot && activeSlot.type==='ban';
+  const btnBg = isActive ? '#3f1520' : '#111827';
+  const btnBorder = isActive ? '#7f2030' : '#1e293b';
+  html += `<button class="ban-tag" style="background:${btnBg};border-color:${btnBorder};color:#9ca3af;" onclick="clickBanBtn()">+ BAN</button>`;
+  container.innerHTML = html;
+}
+
+function renderCenter() {
+  const search = document.getElementById('search-input').value.toLowerCase();
+  const myT = myTeam==='blue' ? blueTeam : redTeam;
+  const enemyT = myTeam==='blue' ? redTeam : blueTeam;
+  const taken = new Set([...blueTeam.filter(s=>s.champ).map(s=>s.champ),...redTeam.filter(s=>s.champ).map(s=>s.champ),...bans]);
+
+  // Role filters
+  let filtersHTML = '';
+  ROLES.forEach(r => {
+    const active = filterRole===r;
+    const bg = active ? ROLE_COLORS[r]+'25' : 'transparent';
+    const border = active ? ROLE_COLORS[r] : '#1e293b';
+    const col = active ? ROLE_COLORS[r] : '#475569';
+    filtersHTML += `<button class="role-filter-btn" style="background:${bg};border-color:${border};color:${col}" onclick="toggleRoleFilter('${r}')">${ROLE_LABELS[r]}</button>`;
+  });
+  document.getElementById('role-filters').innerHTML = filtersHTML;
+
+  // Update label
+  const label = document.getElementById('rec-label');
+  if (activeSlot) {
+    if (activeSlot.type==='ban') label.textContent = 'SELECT BAN';
+    else label.textContent = 'PICK FOR ' + ROLE_LABELS[ROLES[activeSlot.idx]];
+  } else {
+    label.textContent = 'RECOMMENDATIONS';
+  }
+
+  // Build list
+  let champList;
+  if (activeSlot) {
+    // Show all available, filtered by search + role
+    champList = ALL_CHAMPS
+      .filter(n=>!taken.has(n))
+      .filter(n=>!search || n.toLowerCase().includes(search))
+      .filter(n=>!filterRole || C[n].r===filterRole || C[n].r2===filterRole)
+      .map(n => {
+        const role = (activeSlot.type!=='ban' && activeSlot.team) ? ROLES[activeSlot.idx] : null;
+        const {score, reasons} = scoreChamp(n, myT, enemyT, role);
+        return {name:n, score, reasons};
+      })
+      .sort((a,b)=>b.score-a.score);
+  } else {
+    // Show recommendations
+    const role = filterRole || null;
+    champList = getRecs(myT, enemyT, bans, role, 25);
+  }
+
+  let listHTML = '';
+  champList.forEach(item => {
+    const c = C[item.name];
+    const archBg = (ARCH_COLORS[c.arch]||'#555')+'20';
+    const archCol = ARCH_COLORS[c.arch]||'#888';
+    const scoreCol = item.score>=65 ? '#34d399' : item.score>=55 ? '#a3e635' : '#fbbf24';
+    const cursor = activeSlot ? 'cursor:pointer;' : '';
+
+    listHTML += `<div class="champ-row fade-in" onclick="${activeSlot ? `pickChamp('${item.name.replace(/'/g,"\\'")}')` : ''}" style="${cursor}">`;
+    listHTML += `<span style="font-size:8px;padding:1px 5px;border-radius:2px;background:${ROLE_COLORS[c.r]}20;color:${ROLE_COLORS[c.r]};font-weight:700;min-width:26px;text-align:center;font-family:'Orbitron',sans-serif;">${ROLE_LABELS[c.r]}</span>`;
+    listHTML += `<span style="font-size:12px;font-weight:600;flex:1;color:#e2e8f0;">${item.name}</span>`;
+    listHTML += `<span class="font-mono" style="font-size:11px;font-weight:700;color:${scoreCol};min-width:28px;text-align:right;">${item.score}</span>`;
+    listHTML += `<span class="arch-tag" style="background:${archBg};color:${archCol}">${c.arch}</span>`;
+    listHTML += '</div>';
+  });
+
+  document.getElementById('rec-list').innerHTML = listHTML;
+}
+
+function renderAnalysis(side) {
+  const team = side==='blue' ? blueTeam : redTeam;
+  const container = document.getElementById(side+'-analysis');
+  const a = analyzeComp(team);
+  if (!a) { container.innerHTML = ''; return; }
+
+  const statBar = (label, val, max, color) => {
+    const pct = Math.min(100, (val/max)*100);
+    const display = val%1 !== 0 ? val.toFixed(1) : val;
+    return `<div style="margin-bottom:4px;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:2px;">
+        <span class="font-mono" style="font-size:9px;color:#64748b;">${label}</span>
+        <span class="font-mono" style="font-size:9px;color:${color};font-weight:600;">${display}</span>
+      </div>
+      <div class="stat-bar-bg"><div class="stat-bar-fill" style="width:${pct}%;background:${color};"></div></div>
+    </div>`;
+  };
+
+  let html = '<div style="margin-top:10px;padding:8px;background:#080c14;border-radius:5px;border:1px solid #141d2d;">';
+  html += '<div class="font-display" style="font-size:9px;letter-spacing:2px;color:#64748b;margin-bottom:8px;">COMP ANALYSIS</div>';
+
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px;">';
+  html += statBar('CC', a.cc, 20, '#f59e0b');
+  html += statBar('SCALE', a.sc, 3, '#8b5cf6');
+  html += statBar('TANK', a.tank, 4, '#10b981');
+  html += statBar('MOBIL', a.mob, 4, '#3b82f6');
+  html += '</div>';
+
+  // Damage types
+  html += '<div style="display:flex;gap:4px;margin-bottom:8px;">';
+  const dtColors = {physical:'#fca5a5',magic:'#93c5fd',mixed:'#fde68a'};
+  const dtBg = {physical:'#7f1d1d25',magic:'#1e3a5f25',mixed:'#3d2f0025'};
+  Object.entries(a.dmg).filter(([_,v])=>v>0).forEach(([type,count]) => {
+    html += `<span class="font-mono" style="font-size:9px;padding:2px 6px;border-radius:2px;background:${dtBg[type]};color:${dtColors[type]};">${type}: ${count}</span>`;
+  });
+  html += '</div>';
+
+  a.issues.forEach(i => { html += `<div class="issue-text">⚠ ${i}</div>`; });
+  a.strengths.forEach(s => { html += `<div class="strength-text">✦ ${s}</div>`; });
+
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function renderReasoning() {
+  const panel = document.getElementById('reasoning-panel');
+  if (!activeSlot || activeSlot.type==='ban') { panel.style.display='none'; return; }
+
+  const myT = myTeam==='blue' ? blueTeam : redTeam;
+  const enemyT = myTeam==='blue' ? redTeam : blueTeam;
+  const role = ROLES[activeSlot.idx];
+  const recs = getRecs(myT, enemyT, bans, role, 6);
+
+  if (!recs.length) { panel.style.display='none'; return; }
+
+  panel.style.display = 'block';
+  document.getElementById('reasoning-label').textContent = 'TOP PICKS — ' + ROLE_LABELS[role];
+
+  let html = '';
+  recs.forEach(rec => {
+    const scoreCol = rec.score>=65 ? '#34d399' : rec.score>=55 ? '#a3e635' : '#fbbf24';
+    html += `<div class="pick-card" onclick="pickChamp('${rec.name.replace(/'/g,"\\'")}')">`;
+    html += `<div style="display:flex;justify-content:space-between;margin-bottom:4px;">`;
+    html += `<span style="font-size:13px;font-weight:700;color:#e2e8f0;">${rec.name}</span>`;
+    html += `<span class="font-mono" style="font-size:13px;font-weight:700;color:${scoreCol};">${rec.score}</span>`;
+    html += '</div>';
+    rec.reasons.forEach(r => {
+      const col = r.v > 0 ? '#6ee7b7' : '#fca5a5';
+      html += `<div class="font-mono" style="font-size:10px;color:${col};margin-top:1px;">${r.v>0?'+':''}${r.v} ${r.t}</div>`;
+    });
+    html += '</div>';
+  });
+  document.getElementById('reasoning-cards').innerHTML = html;
+}
+
+// Initialize
+renderAll();
+</script>
+</body>
+</html>
