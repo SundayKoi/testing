@@ -374,7 +374,7 @@ const ROLE_COLORS = {top:"#e8975a",jgl:"#6bc26b",mid:"#6b9ee8",adc:"#e86b6b",sup
 const ARCH_COLORS = {engage:"#e85a3a",poke:"#5ab8e8",burst:"#e85ae8",dps:"#e8c93a",peel:"#5ae895",split:"#c49a5a",utility:"#8a8ae8",assassin:"#9a3ae8",catcher:"#e89a5a",bruiser:"#8a6844"};
 
 // Role mapping: HTML uses jgl/adc/sup, data uses jungle/bottom/support
-const ROLE_TO_DATA = {top:"top",jgl:"jungle",mid:"middle",adc:"bottom",sup:"support"};
+const ROLE_TO_DATA = {top:"top",jgl:"jgl",mid:"mid",adc:"adc",sup:"sup"};
 const DATA_TO_ROLE = {top:"top",jungle:"jgl",middle:"mid",bottom:"adc",support:"sup"};
 
 </script>
@@ -470,10 +470,10 @@ function scoreChamp(name, myTeam, enemyTeam, role) {
   if (enemyPicks.length > 0) {
     let ctrTotal = 0;
     let ctrCount = 0;
+    const myRole = role || c.r;
     enemyPicks.forEach(p => {
-      // Check if they share a lane
-      const matchRole = role || c.r;
-      if (p.role === matchRole || !role) {
+      // Check lane matchup: my role vs enemy's role
+      if (p.role === myRole) {
         const ctr = getCounter(name, p.name, p.role);
         if (ctr !== null) {
           ctrTotal += (ctr - 0.5);
